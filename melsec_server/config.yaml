@@ -1,0 +1,17 @@
+# Melsec Server Configuration
+network:
+  host: "0.0.0.0"
+  port: 6001
+
+# Device Memory Definitions
+# range: [start_address, end_address]
+devices:
+  D:
+    code: 0xA8
+    range: [0, 65535]    # Max Words
+  W:
+    code: 0xB4
+    range: [0, 65535]    # Max Words
+  M:
+    code: 0x90
+    range: [0, 32767]   # Max Bits

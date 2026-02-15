@@ -1,0 +1,9 @@
+services:
+  s7-server:
+    image: s7-server:1.0
+    container_name: s7-server
+    restart: unless-stopped    
+    ports:
+      - 6002:6002
+    volumes:
+      - $PWD:/s7_server

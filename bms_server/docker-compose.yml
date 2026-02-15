@@ -1,0 +1,9 @@
+services:
+  bms-server:
+    image: bms-server:1.0
+    container_name: bms-server
+    restart: unless-stopped    
+    ports:
+      - 7001:7001
+    volumes:
+      - $PWD:/bms_server

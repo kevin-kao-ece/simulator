@@ -1,0 +1,9 @@
+services:
+  pcs_server:
+    image: pcs-server:1.0
+    container_name: pcs-server
+    restart: unless-stopped    
+    ports:
+      - 7002:7002
+    volumes:
+      - $PWD:/pcs_server

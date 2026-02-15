@@ -1,0 +1,9 @@
+services:
+  melsec-server:
+    image: melsec-server:1.0
+    container_name: melsec-server
+    restart: unless-stopped    
+    ports:
+      - 6001:6001
+    volumes:
+      - $PWD:/melsec_server
