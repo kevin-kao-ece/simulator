@@ -4,14 +4,26 @@ network:
   port: 6001
 
 # Device Memory Definitions
-# range: [start_address, end_address]
+# Word (16 bit) codes: D=0xA8, W=0xB4, R=0xAF, ZR=0xB0, TN=0xC2, CN=0xC5
+# Bit codes: M=0x90, X=0x9C, Y=0x9D, B=0xA0, TS=0xC1, CS=0xC4
 devices:
-  D:
-    code: 0xA8
-    range: [0, 65535]    # Max Words
-  W:
-    code: 0xB4
-    range: [0, 65535]    # Max Words
-  M:
-    code: 0x90
-    range: [0, 32767]   # Max Bits
+  # --- Standard Registers ---
+  D:  { code: 0xA8, range: [0, 65535] }
+  W:  { code: 0xB4, range: [0, 65535] }
+  R:  { code: 0xAF, range: [0, 32767] }
+  ZR: { code: 0xB0, range: [0, 65535] }
+
+  # --- Timers (T) ---
+  TN: { code: 0xC2, range: [0, 2047] } # Timer Current Value (Word)
+  TS: { code: 0xC1, range: [0, 2047] } # Timer Contact (Bit)
+  TC: { code: 0xC0, range: [0, 2047] } # Timer Coil (Bit)
+
+  # --- Counters (C) ---
+  CN: { code: 0xC5, range: [0, 1023] } # Counter Current Value (Word)
+  CS: { code: 0xC4, range: [0, 1023] } # Counter Contact (Bit)
+  CC: { code: 0xC3, range: [0, 1023] } # Counter Coil (Bit)
+
+  # --- Bit Devices ---
+  M:  { code: 0x90, range: [0, 32767] }
+  X:  { code: 0x9C, range: [0, 4095] } # 0x000 ~ 0xFFF
+  Y:  { code: 0x9D, range: [0, 4095] } # 0x000 ~ 0xFFF

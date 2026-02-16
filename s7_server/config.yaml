@@ -1,0 +1,16 @@
+# S7 Server Configuration
+network:
+  host: "0.0.0.0"
+  port: 6002
+
+# S7 Area Definitions
+areas:
+  PE: { size: 256 }   # Process Inputs (I)
+  PA: { size: 256 }   # Process Outputs (Q)
+  MK: { size: 512 }   # Merkers (M)
+  DB1: { size: 1024 } # Data Block 1
+
+# Simulation Settings
+logic:
+  fault_bit_address: 100 # M100.0
+  fault_code_db_offset: 10 # DB1.DBW10
