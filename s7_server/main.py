@@ -99,7 +99,7 @@ class S7FullSimulator:
                             if rpm < 0: rpm = 0
                         
                         # 將轉速寫入 DB1.DBW2 (偏移量 2，INT)
-                        set_int(db1, 2, int(rpm))
+                        set_int(db1, 4, int(rpm))
                         
                         # 模擬溫度 (隨轉速略微波動)
                         temp = 25.0 + (rpm / 100.0) + (angle % 2)

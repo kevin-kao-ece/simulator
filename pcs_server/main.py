@@ -16,6 +16,16 @@ from pymodbus.server import StartAsyncTcpServer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PCS-Ultimate-Sim")
 
+class LoggingDataBlock(ModbusSequentialDataBlock):
+    def __init__(self, address, values):
+        super().__init__(address, values)
+        self.internal_update = False
+
+    def setValues(self, address, values):
+        if not self.internal_update:
+            print(f"EXTERNAL WRITE | Address: {address} | Data: {values}")
+        super().setValues(address, values)
+
 # =========================================================
 # Data Type Helpers
 # =========================================================
@@ -32,7 +42,11 @@ def set_data(context, addr, value, data_type="U16"):
     elif data_type == "S32":
         packed = struct.pack('>i', int(value))
         vals = list(struct.unpack('>HH', packed))
+    
+    block = context[slave_id].store['h'] # Get the holding register block
+    block.internal_update = True         # Set flag
     context[slave_id].setValues(3, addr, vals)
+    block.internal_update = False        # Reset flag    
 
 # =========================================================
 # Simulator Logic Class
@@ -127,7 +141,7 @@ async def update_registers(context, logic):
             # set_data(context, 12364, 9600) 
             # set_data(context, 12466, 1) # Power flow direction
 
-            logger.info(f"Update Success | PV: {d['pv']}W | SOC: {d['soc']:.1f}% | Grid: {int(d['grid_w'])}W")
+            #logger.info(f"Update Success | PV: {d['pv']}W | SOC: {d['soc']:.1f}% | Grid: {int(d['grid_w'])}W")
 
         except Exception as e:
             logger.error(f"Update loop error: {e}")
@@ -135,7 +149,7 @@ async def update_registers(context, logic):
 
 async def main():
     # 建立涵蓋所有位址的資料區塊
-    block = ModbusSequentialDataBlock(0, [0] * 65535)
+    block = LoggingDataBlock(0, [0] * 65535)
     context = ModbusServerContext(devices=ModbusDeviceContext(hr=block), single=True)
     
     logic = PCSExtendedLogic()
