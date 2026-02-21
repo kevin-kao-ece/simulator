@@ -1,0 +1,9 @@
+services:
+  ethernet-ip-server:
+    image: ethernet-ip-server:1.0
+    container_name: ethernet-ip-server
+    restart: unless-stopped    
+    ports:
+      - 6003:6003
+    volumes:
+      - $PWD:/ethernet_ip_server
