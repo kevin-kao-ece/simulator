@@ -1,0 +1,9 @@
+services:
+  fins-server:
+    image: fins-server:1.0
+    container_name: fins-server
+    restart: unless-stopped    
+    ports:
+      - 9600:9600/udp
+    volumes:
+      - $PWD:/fins_server
