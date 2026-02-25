@@ -32,7 +32,8 @@ class LoggingDataBlock(ModbusSequentialDataBlock):
 def set_data(context, addr, value, data_type="U16"):
     slave_id = 0x00
     if data_type == "U16":
-        vals = [int(value) & 0xFFFF]
+        packed = struct.pack('>H', int(value))
+        vals = list(struct.unpack('>H', packed))
     elif data_type == "S16":
         packed = struct.pack('>h', int(value))
         vals = list(struct.unpack('>H', packed))
