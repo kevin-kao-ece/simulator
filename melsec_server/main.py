@@ -7,7 +7,7 @@ import time
 
 # --- Logging Setup ---
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s'
 )
 logger = logging.getLogger("MelsecSimulator")
@@ -22,7 +22,7 @@ class MelsecServer:
     def __init__(self, config_path='config.yaml'):
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-        
+
         self.net = self.config['network']
         self.dev_cfg = self.config['devices']
         self.running = True
@@ -32,21 +32,24 @@ class MelsecServer:
         for key, cfg in self.dev_cfg.items():
             size = cfg['range'][1] - cfg['range'][0] + 1
             code = cfg['code']
-            
+
             if code in WORD_DEVICE_CODES:
                 # Word devices: 2 bytes per point
                 self.memory[code] = bytearray(size * 2)
             else:
                 # Bit devices: 1 byte per point (0x00 or 0x01)
                 self.memory[code] = bytearray(size)
-        
+
         logger.info(f"Initialized memory for codes: {[hex(c) for c in self.memory.keys()]}")
 
         # --- NEW: Set Y0 Initial Value to 1 ---
         y_code = self.dev_cfg['Y']['code']
         self.memory[y_code][0] = 0x01  # Set Y0 to ON immediately
-        
         logger.info(f"Initialized memory. Y0 is set to 1 (Motor Start).")
+        d_code = self.dev_cfg['D']['code']
+        # 1200 decimal = 0x04B0 -> Packed as [0xB0, 0x04] (Little Endian)
+        self.memory[d_code][28:30] = struct.pack('<H', 1200)
+        logger.info("D12 (Target RPM) initialized to 1200.")
 
     def start_simulation_logic(self):
         """Background thread to simulate a Motor State & Physics."""
@@ -56,15 +59,17 @@ class MelsecServer:
             x_code = self.dev_cfg['X']['code']
             y_code = self.dev_cfg['Y']['code']
             m_code = self.dev_cfg['M']['code']
-            
+
             # Internal physics variables
             current_rpm = 0.0
-            motor_target_rpm = 1500.0
-            
+
             while self.running:
+                raw_target = self.memory[d_code][28:30]
+                motor_target_rpm = struct.unpack('<H', raw_target)[0]
+
                 # 1. READ COMMAND: Check if Start Output (Y0) is ON
-                motor_switch = self.memory[y_code][0] 
-                
+                motor_switch = self.memory[y_code][0]
+
                 # 2. PHYSICS: Ramp Speed Up/Down
                 if motor_switch == 0x01:
                     if current_rpm < motor_target_rpm:
@@ -77,16 +82,16 @@ class MelsecServer:
                         current_rpm = 0
                         self.memory[x_code][0] = 0x00  # Feedback X0 = Stopped
 
-                # 3. WRITE RPM TO D10 (Word)
-                self.memory[d_code][20:22] = struct.pack('<H', int(current_rpm*10))
+                # 3. WRITE RPM TO D10 (float: 2xWord)
+                self.memory[d_code][20:24] = struct.pack('<f', float(current_rpm))
 
                 # 4. SIMULATE CURRENT (Amps) TO D11
                 # Formula: (RPM / 100) + random noise
                 if current_rpm > 0:
                     current_amps = (current_rpm / 150) + (int(time.time()) % 3)
                 else:
-                    current_amps = 0
-                self.memory[d_code][22:24] = struct.pack('<H', int(current_amps*100))
+                    current_amps = 0.0
+                self.memory[d_code][24:28] = struct.pack('<f', float(current_amps))
 
                 # 5. FAULT LOGIC: If RPM > 1800 (Overload), trip M10
                 if current_rpm > 1800:
@@ -115,7 +120,7 @@ class MelsecServer:
                 try:
                     data = conn.recv(4096) # Large buffer for ZR/R block transfers
                     if not data: break
-                    
+
                     if len(data) < 21: continue # Minimum 3E frame size
 
                     # --- Request Parsing ---
@@ -135,12 +140,18 @@ class MelsecServer:
                     if cmd == 0x0401:
                         if dev_code in WORD_DEVICE_CODES:
                             start, end = head_addr * 2, (head_addr + points) * 2
+                            if end > len(self.memory[dev_code]):
+                                conn.sendall(self.make_response(b'', error=0xC050))
+                                continue
                             payload = bytes(self.memory[dev_code][start:end])
                         else:
                             # --- BIT DEVICE FIX ---
+                            if head_addr + points > len(self.memory[dev_code]):
+                                conn.sendall(self.make_response(b'', error=0xC050))
+                                continue
                             raw_bits = self.memory[dev_code][head_addr : head_addr + points]
                             packed_payload = []
-                            
+
                             # MC Protocol packs 2 bits per byte (4 bits each)
                             # Even-indexed bit (0, 2, 4...) -> High Nibble
                             # Odd-indexed bit (1, 3, 5...)  -> Low Nibble
@@ -150,7 +161,7 @@ class MelsecServer:
                                 if i + 1 < len(raw_bits):
                                     b2 = (raw_bits[i+1] & 0x01) # Bit 1 to Low Nibble
                                 packed_payload.append(b1 | b2)
-                            
+
                             payload = bytes(packed_payload)
                         conn.sendall(self.make_response(bytes(payload)))
                         logger.debug(f"READ {points} pts from {hex(dev_code)} at {head_addr}")
@@ -162,15 +173,17 @@ class MelsecServer:
                         if dev_code in WORD_DEVICE_CODES:
                             start, end = head_addr * 2, (head_addr + points) * 2
                             needed_len = points * 2
-                            if end <= len(self.memory[dev_code]):
-                                self.memory[dev_code][start:end] = write_data[:needed_len]
-                                conn.sendall(self.make_response(b''))
+                            if end > len(self.memory[dev_code]):
+                                conn.sendall(self.make_response(b'', error=0xC050))
+                                continue
+                            self.memory[dev_code][start:end] = write_data[:needed_len]
+                            conn.sendall(self.make_response(b''))
                         else:
                             # --- BIT DEVICE UNPACKING FIX ---
                             # Number of bytes sent by client is (points + 1) // 2
                             num_bytes_received = (points + 1) // 2
                             payload = write_data[:num_bytes_received]
-                            
+
                             if head_addr + points <= len(self.memory[dev_code]):
                                 unpacked_bits = []
                                 for b in payload:
@@ -179,11 +192,11 @@ class MelsecServer:
                                     # Extract Low Nibble (Second bit)
                                     if len(unpacked_bits) < points:
                                         unpacked_bits.append(b & 0x01)
-                                
+
                                 # Store as clean 0x00 or 0x01 in memory
                                 for i, bit_val in enumerate(unpacked_bits):
                                     self.memory[dev_code][head_addr + i] = bit_val
-                                    
+
                                 conn.sendall(self.make_response(b''))
                                 logger.info(f"WRITE BIT {points} pts to {hex(dev_code)} at {head_addr}: {unpacked_bits}")
                             else:
@@ -197,12 +210,12 @@ class MelsecServer:
         self.start_simulation_logic()
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        
+
         try:
             server.bind((self.net['host'], self.net['port']))
             server.listen(5)
             logger.info(f"MELSEC 3E SIMULATOR START: {self.net['host']}:{self.net['port']}")
-            
+
             while True:
                 conn, addr = server.accept()
                 threading.Thread(target=self.handle_client, args=(conn, addr), daemon=True).start()

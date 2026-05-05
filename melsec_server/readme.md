@@ -45,8 +45,9 @@
 | :--- | :--- | :--- | :--- |
 | **Y0** | 馬達啟動/停止 | Bit | `self.memory[0x9D][0]` |
 | **X0** | 運轉回授 | Bit | `self.memory[0x9C][0]` |
-| **D10** | 馬達轉速 (RPM) | Word (U16) | `self.memory[0xA8][20:22]` |
-| **D11** | 馬達電流 (Amps) | Word (U16) | `self.memory[0xA8][22:24]` |
+| **D10** | 馬達轉速 (RPM) | Float (IEEE754, 2 Words) | `self.memory[0xA8][20:24]` |
+| **D11** | 馬達電流 (Amps) | Float (IEEE754, 2 Words) | `self.memory[0xA8][24:28]` |
+| **D12** | 目標轉速 (Target RPM) | Word (U16) | `self.memory[0xA8][28:30]` |
 | **M10** | 過載故障 | Bit | `self.memory[0x90][10]` |
 
 ## 4. 技術實作說明
