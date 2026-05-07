@@ -18,6 +18,16 @@ WORD_DEVICE_CODES = {0xA8, 0xB4, 0xAF, 0xB0, 0xC2, 0xC5} # D, W, R, ZR, TN, CN
 # Bit Devices: 1 byte per address (simulated as bytearray for alignment)
 BIT_DEVICE_CODES  = {0x90, 0x9C, 0x9D, 0xA0, 0xC1, 0xC0, 0xC4, 0xC3} # M, X, Y, B, TS, TC, CS, CC
 
+def _bcd_pack_u16_u9999(value):
+    """Pack 0..9999 into one word as 4 decimal digits (one nibble per digit)."""
+    v = max(0, min(9999, int(value)))
+    d = [(v // 1000) % 10, (v // 100) % 10, (v // 10) % 10, v % 10]
+    w = 0
+    for n in d:
+        w = (w << 4) | (n & 0xF)
+    return w
+
+
 class MelsecServer:
     def __init__(self, config_path='config.yaml'):
         with open(config_path, 'r') as f:
@@ -47,21 +57,28 @@ class MelsecServer:
         self.memory[y_code][0] = 0x01  # Set Y0 to ON immediately
         logger.info(f"Initialized memory. Y0 is set to 1 (Motor Start).")
         d_code = self.dev_cfg['D']['code']
-        # 1200 decimal = 0x04B0 -> Packed as [0xB0, 0x04] (Little Endian)
+        # D14 @ byte offset 28 (target RPM UINT16 LE)
         self.memory[d_code][28:30] = struct.pack('<H', 1200)
-        logger.info("D12 (Target RPM) initialized to 1200.")
+        logger.info("D14 (Target RPM, UINT16) initialized to 1200.")
 
     def start_simulation_logic(self):
         """Background thread to simulate a Motor State & Physics."""
         def update_loop():
             # Device Codes from Config
             d_code = self.dev_cfg['D']['code']
+            w_code = self.dev_cfg['W']['code']
             x_code = self.dev_cfg['X']['code']
             y_code = self.dev_cfg['Y']['code']
             m_code = self.dev_cfg['M']['code']
+            tn_code = self.dev_cfg['TN']['code']
+            cn_code = self.dev_cfg['CN']['code']
+            ts_code = self.dev_cfg['TS']['code']
 
             # Internal physics variables
             current_rpm = 0.0
+            runtime_ticks = 0
+            encoder_i32 = 0
+            energy_kwh = 0.0
 
             while self.running:
                 raw_target = self.memory[d_code][28:30]
@@ -82,16 +99,47 @@ class MelsecServer:
                         current_rpm = 0
                         self.memory[x_code][0] = 0x00  # Feedback X0 = Stopped
 
-                # 3. WRITE RPM TO D10 (float: 2xWord)
+                # 3. WRITE RPM TO D10-D11 (FLOAT32, 2 words LE)
                 self.memory[d_code][20:24] = struct.pack('<f', float(current_rpm))
 
-                # 4. SIMULATE CURRENT (Amps) TO D11
-                # Formula: (RPM / 100) + random noise
+                # 4. SIMULATE CURRENT (Amps) TO D12-D13 (FLOAT32, 2 words LE)
                 if current_rpm > 0:
                     current_amps = (current_rpm / 150) + (int(time.time()) % 3)
                 else:
                     current_amps = 0.0
                 self.memory[d_code][24:28] = struct.pack('<f', float(current_amps))
+
+                # --- Extra MELSEC-oriented types for client/HMI testing ---
+                err_scaled = int(round((motor_target_rpm - current_rpm) * 100))
+                err_scaled = max(-32768, min(32767, err_scaled))
+                self.memory[d_code][30:32] = struct.pack('<h', err_scaled)
+
+                runtime_ticks = (runtime_ticks + 1) & 0xFFFFFFFF
+                self.memory[d_code][32:36] = struct.pack('<I', runtime_ticks)
+
+                encoder_i32 += int(round(current_rpm * 16.7))
+                encoder_i32 = max(-2147483648, min(2147483647, encoder_i32))
+                self.memory[d_code][36:40] = struct.pack('<i', encoder_i32)
+
+                energy_kwh += abs(current_rpm) * abs(current_amps) * (0.1 / 3.6e9)
+                self.memory[d_code][40:48] = struct.pack('<d', energy_kwh)
+
+                bus_v_x10 = int(round(3800 + (current_rpm / 1200.0) * 15 + (runtime_ticks % 7)))
+                bus_v_x10 = max(0, min(65535, bus_v_x10))
+                self.memory[d_code][48:50] = struct.pack('<H', bus_v_x10)
+
+                self.memory[d_code][50:52] = struct.pack('<H', _bcd_pack_u16_u9999(current_rpm))
+
+                self.memory[w_code][200:202] = struct.pack('<H', motor_target_rpm)
+
+                self.memory[tn_code][0:2] = struct.pack('<H', runtime_ticks & 0xFFFF)
+
+                pulse_inc = max(0, int(current_rpm / 120.0))
+                cur_cn = struct.unpack('<H', self.memory[cn_code][0:2])[0]
+                cur_cn = (cur_cn + pulse_inc) & 0xFFFF
+                self.memory[cn_code][0:2] = struct.pack('<H', cur_cn)
+
+                self.memory[ts_code][0] = 0x01 if (runtime_ticks % 100) >= 50 else 0x00
 
                 # 5. FAULT LOGIC: If RPM > 1800 (Overload), trip M10
                 if current_rpm > 1800:
