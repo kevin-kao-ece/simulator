@@ -61,24 +61,28 @@ class OmronFinsClient:
         return None
 
     def read_all_data(self):
-        raw = self.read_d_words(0, 12)
+        # Read a block that covers D10..D25 (16 words)
+        raw = self.read_d_words(10, 16)
         if not raw: return None
         
-        # Mapping based on our agreed Address Map
+        # Mapping aligned with ../melsec_server motor simulator semantics
         res = {
-            "Motor_Control": struct.unpack('>H', raw[0:2])[0],
-            "Target_RPM": struct.unpack('>i', raw[2:6])[0],
-            "Run_Status": struct.unpack('>H', raw[6:8])[0],
-            "Current_RPM": struct.unpack('>i', raw[8:12])[0],
-            "Temp": struct.unpack('>f', raw[12:16])[0],
-            "Start_Timestamp": struct.unpack('>q', raw[16:24])[0]
+            "D10_RPM_f32": struct.unpack('<f', raw[0:4])[0],             # D10..D11
+            "D12_Amps_f32": struct.unpack('<f', raw[4:8])[0],            # D12..D13
+            "D14_TargetRPM_u16": struct.unpack('<H', raw[8:10])[0],      # D14
+            "D15_ErrScaled_i16": struct.unpack('<h', raw[10:12])[0],     # D15
+            "D16_RuntimeTicks_u32": struct.unpack('<I', raw[12:16])[0],  # D16..D17
+            "D18_Encoder_i32": struct.unpack('<i', raw[16:20])[0],       # D18..D19
+            "D20_Energy_kWh_f64": struct.unpack('<d', raw[20:28])[0],    # D20..D23
+            "D24_BusV_x10_u16": struct.unpack('<H', raw[28:30])[0],      # D24
+            "D25_RPM_BCD_u16": struct.unpack('<H', raw[30:32])[0],       # D25
         }
         return res
 
 if __name__ == "__main__":
-    client = OmronFinsClient('20.6.35.107')
+    client = OmronFinsClient('127.0.0.1')
     
-    print("--- Sending Start Command (D0 = 1) ---")
+    print("--- Sending Start Command (legacy D0 = 1, mirrors to CIO Y0) ---")
     client.write_d_word(0, [1])
     data = client.read_all_data()
     
@@ -86,9 +90,13 @@ if __name__ == "__main__":
         for _ in range(20):
             data = client.read_all_data()
             if data:
-                ts = data['Start_Timestamp']
-                dt = datetime.fromtimestamp(ts).strftime('%H:%M:%S') if ts > 0 else "N/A"
-                print(f"RPM: {data['Current_RPM']} | Temp: {data['Temp']:.1f} | Started: {dt}")
+                print(
+                    f"RPM: {data['D10_RPM_f32']:.1f} | "
+                    f"Amps: {data['D12_Amps_f32']:.2f} | "
+                    f"Target: {data['D14_TargetRPM_u16']} | "
+                    f"Err: {data['D15_ErrScaled_i16']} | "
+                    f"Ticks: {data['D16_RuntimeTicks_u32']}"
+                )
             time.sleep(1)
         
         print("--- Sending Start Command (D0 = 0) ---")
@@ -96,9 +104,13 @@ if __name__ == "__main__":
         for _ in range(10):
             data = client.read_all_data()
             if data:
-                ts = data['Start_Timestamp']
-                dt = datetime.fromtimestamp(ts).strftime('%H:%M:%S') if ts > 0 else "N/A"
-                print(f"RPM: {data['Current_RPM']} | Temp: {data['Temp']:.1f} | Started: {dt}")
+                print(
+                    f"RPM: {data['D10_RPM_f32']:.1f} | "
+                    f"Amps: {data['D12_Amps_f32']:.2f} | "
+                    f"Target: {data['D14_TargetRPM_u16']} | "
+                    f"Err: {data['D15_ErrScaled_i16']} | "
+                    f"Ticks: {data['D16_RuntimeTicks_u32']}"
+                )
             time.sleep(1)
     finally:
         print("--- Sending Stop Command (D0 = 0) ---")

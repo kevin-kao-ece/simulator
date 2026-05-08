@@ -1,0 +1,34 @@
+network:
+  host: 0.0.0.0
+  port: 9601
+
+# OMRON FINS memory areas (word/bit area codes)
+areas:
+  D:
+    word: 0x82
+    bit: 0x02
+  CIO:
+    word: 0xB0
+    bit: 0x30
+  W:
+    word: 0xB1
+    bit: 0x31
+  H:
+    word: 0xB2
+    bit: 0x32
+  E0:
+    word: 0xA0
+    bit: 0x20
+
+simulator:
+  # MELSEC-like motor defaults mapped onto FINS areas
+  init:
+    # CIO bit 0.0
+    y0_start: 1
+    # D14 (uint16, little-endian bytes in DM buffer)
+    target_rpm: 1200
+
+  # Optional legacy/demo preload values
+  demo:
+    d100_string: HELLOWORLD
+    d200_real: 123.456

@@ -12,5 +12,6 @@ areas:
 
 # Simulation Settings
 logic:
+  # Legacy keys kept for backward compatibility (not used by current motor simulator loop)
   fault_bit_address: 100 # M100.0
   fault_code_db_offset: 10 # DB1.DBW10
