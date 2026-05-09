@@ -4,7 +4,7 @@
 
 ## 1. 系統規範
 * **通訊協定**: MELSEC MC Protocol (3E Frame Binary)
-* **通訊埠 (Port)**: `6001`
+* **通訊埠 (Port)**: `16002`
 * **模式**: 多執行緒（支援多個客戶端同時連線）
 * **位元組順序 (Endianness)**: Little-Endian（MELSEC Binary 標準）
 
@@ -63,11 +63,18 @@
 | **M10** | 過載故障 | Bit | `self.memory[0x90][10]` |
 
 ## 4. 技術實作說明
-* **位元組定址**: 字組位址計算方式為 $位址 \times 2$（例如：D10 位在索引 20 處）。
+* **位元組定址**: 字組位址計算方式為 \(位址 \times 2\)（例如：D10 位在索引 20 處）。
 * **模擬迴圈**: `update_loop` 每 100 毫秒執行一次，提供平滑的 RPM 升降斜率。
 * **安全機制**: 如果 RPM 超過 `1800`，過載位元 **M10** 將自動設為 High。
 
 ## 5. 快速開始
-1. 安裝依賴項目：`pip install pyyaml`
+1. 安裝依賴：`pip install -r requirements.txt`
 2. 啟動模擬器：`python main.py`
-3. 將 HMI/客戶端連線至 `127.0.0.1:6001`，使用 MELSEC QnA 3E Binary TCP。
+3. 將 HMI/客戶端連線至 `127.0.0.1:16002`，使用 MELSEC QnA 3E Binary TCP
+
+### Docker / Compose
+* Build/Run:
+  * `docker build -t melsec-server:1.0 .`
+  * `docker run --rm -p 16002:16002 melsec-server:1.0`
+* Compose:
+  * `docker compose up -d --build`

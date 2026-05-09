@@ -4,6 +4,6 @@ services:
     container_name: fins-server
     restart: unless-stopped    
     ports:
-      - 9600:9600/udp
+      - 16004:16004/udp
     volumes:
       - $PWD:/fins_server

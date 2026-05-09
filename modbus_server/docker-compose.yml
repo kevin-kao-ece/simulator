@@ -1,0 +1,9 @@
+services:
+  bms-server:
+    image: modbus-server:1.0
+    container_name: modbus-server
+    restart: unless-stopped    
+    ports:
+      - 16001:16001
+    volumes:
+      - $PWD:/modbus_server

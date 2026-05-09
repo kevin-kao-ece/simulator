@@ -7,7 +7,7 @@ import yaml
 
 # --- OMRON FINS CONFIGURATION ---
 _DEFAULT_CONFIG = {
-    "network": {"host": "0.0.0.0", "port": 9600},
+    "network": {"host": "0.0.0.0", "port": 16004},
     "areas": {
         "D": {"word": 0x82, "bit": 0x02},
         "CIO": {"word": 0xB0, "bit": 0x30},
@@ -156,7 +156,7 @@ def background_logic():
 
     # --- MELSEC-compatible map (implemented on OMRON areas) ---
     # Bits (simulated on CIO bit area):
-    # - Y0  (Motor Start)    -> CIO bit 0.0
+    # - Y0  (Motor Start)    -> CIO bit 0.0（亦可由 D0.0 legacy 鏡像啟動；OR 合併，不會僅因 D0=0 清除對 CIO 的寫入）
     # - X0  (Running FB)     -> CIO bit 0.1
     # - M10 (Fault bit)      -> CIO bit 0.10
     CIO_BIT = AREAS['CIO']['bit']   # 0x30
@@ -184,17 +184,14 @@ def background_logic():
         raw_target = plc.access(D_WORD, 14, 0, 1)
         target_rpm = struct.unpack('<H', raw_target)[0]
 
-        # --- Read start switch (Y0) from CIO bits ---
-        y0 = plc.access(CIO_BIT, 0, 0, 1)[0]  # 0/1
-
-        # Backward-compat mirror: D0.0 acts as start/stop command
+        # --- Start command: CIO 0.00 (Y0) OR legacy mirror D0.00 ---
+        # 舊版 bug：僅依 D0.0 決定 Y0，D0=0 時每拍把 CIO Y0 清 0，會抹掉 Northbound 對 CIO 的位元寫入，
+        # OPC UA 輪詢讀回永遠對不上剛寫入的 True → Northbound write confirm timeout。
+        y0_cio = plc.access(CIO_BIT, 0, 0, 1)[0] & 1
         d0_word = struct.unpack_from('>H', plc.buffers[D_WORD], 0)[0]
-        if d0_word & 0x01:
-            y0 = 1
-            plc.access(CIO_BIT, 0, 0, 1, data=b'\x01')
-        else:
-            y0 = 0
-            plc.access(CIO_BIT, 0, 0, 1, data=b'\x00')
+        legacy_start = 1 if (d0_word & 0x01) else 0
+        y0 = 1 if (y0_cio or legacy_start) else 0
+        plc.access(CIO_BIT, 0, 0, 1, data=bytes([y0]))
 
         # --- Physics: Ramp Speed Up/Down ---
         if y0 == 1:

@@ -1,6 +1,6 @@
 network:
   host: 0.0.0.0
-  port: 9600
+  port: 16004
 
 # OMRON FINS memory areas (word/bit area codes)
 areas:

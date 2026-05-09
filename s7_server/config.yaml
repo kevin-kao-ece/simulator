@@ -1,7 +1,7 @@
 # S7 Server Configuration
 network:
   host: "0.0.0.0"
-  port: 6002
+  port: 16003
 
 # S7 Area Definitions
 areas:

@@ -1,7 +1,7 @@
 # Melsec Server Configuration
 network:
   host: "0.0.0.0"
-  port: 6001
+  port: 16002
 
 # Device Memory Definitions
 # Word (16 bit) codes: D=0xA8, W=0xB4, R=0xAF, ZR=0xB0, TN=0xC2, CN=0xC5

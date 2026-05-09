@@ -4,6 +4,6 @@ services:
     container_name: s7-server
     restart: unless-stopped    
     ports:
-      - 6002:6002
+      - 16003:16003
     volumes:
       - $PWD:/s7_server

@@ -4,6 +4,6 @@ services:
     container_name: ethernet-ip-server
     restart: unless-stopped    
     ports:
-      - 6003:6003
+      - 16005:16005
     volumes:
       - $PWD:/ethernet_ip_server

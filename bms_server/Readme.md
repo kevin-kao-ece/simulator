@@ -1,19 +1,17 @@
-# BMS Modbus TCP 模擬器說明文件
+# BMS Modbus TCP 模擬器
 
 這是一個基於 Python `pymodbus` 庫開發的電池管理系統（BMS）模擬器。它能模擬 12 串電池組的電壓、電流、溫度及保護邏輯，並透過 Modbus TCP 協定對外提供數據交換。
 
-## 1. 概述 (Overview)
-
-本模擬器旨在提供一個虛擬的 BMS 環境，用於測試上位機（如 SCADA、PLC 或自定義監控軟體）。模擬器內部包含一個簡易的物理模型，會根據電流大小計算電壓降與溫升，並自動觸發警報與狀態切換。
+## 1. 系統規範
 
 * **通訊協定**: Modbus TCP
-* **預設埠號**: `7001`
+* **通訊埠 (Port)**: `7001`
 * **資料格式**: 16-bit 無符號整數 (U16)，部分暫存器需處理正負號 (Two's Complement)
 * **更新頻率**: 物理計算每 1 秒執行一次，Modbus 暫存器每 3 秒同步一次
 
 ---
 
-## 2. 暫存器規格 (Tag Spec)
+## 2. 配置的設備記憶體 (Device Memory)
 
 以下為本模擬器支援的 Holding Register 定義：
 
@@ -67,3 +65,23 @@
 1. 確保已安裝 `pymodbus`:
    ```bash
    pip install pymodbus
+   ```
+
+## 4. 技術實作說明
+
+* **縮放 (Scale)**: 文件中的縮放倍率代表「暫存器內的整數」如何轉回工程值（例如 0.1V / 0.01V / 0.1°C）。
+* **帶符號電流**: `HR_ACTUAL_CURRENT` 以 two's complement 表示負值，讀取端需以 `int16` 解析後再除以 10。
+* **資料刷新**: 模擬器會周期性更新唯讀區；可寫入指令暫存器初始化為 0 且不會被模擬器覆寫。
+
+## 5. 快速開始
+
+1. 安裝依賴：`pip install -r requirements.txt`
+2. 啟動模擬器：`python main.py`
+3. 使用 Modbus 工具連線至 `127.0.0.1:7001` 讀取/寫入對應暫存器
+
+### Docker / Compose
+* Build/Run:
+  * `docker build -t bms-server:1.0 .`
+  * `docker run --rm -p 7001:7001 bms-server:1.0`
+* Compose:
+  * `docker compose up -d --build`

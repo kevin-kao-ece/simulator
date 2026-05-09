@@ -1,8 +1,8 @@
-# PCS Modbus TCP 模擬器說明文件
+# PCS Modbus TCP 模擬器
 
 本模擬器模擬一台整合了 PV（太陽能）、Battery（電池儲能）、Load（負載監測）與 Backup（備援系統）功能的工業級 **PCS (Power Conversion System)**。
 
-## 1. 系統通訊規範
+## 1. 系統規範
 * **通訊協定**: Modbus TCP
 * **預設埠號**: `7002`
 * **資料序 (Endianness)**: 32 位元數據 (U32/S32) 採用 **Big Endian** 格式（高位暫存器在前）。
@@ -10,7 +10,11 @@
 
 ---
 
-## 2. 暫存器清單 (Tag List)
+## 2. 配置的設備記憶體 (Device Memory)
+
+本模擬器以 Holding Registers 為主，以下表格列出主要位址與縮放方式（部分為 S32/U32，採 Big-Endian register order）。
+
+## 3. 模擬邏輯說明
 
 ### A. 即時電力與環境量測 (Read Only)
 | 地址 (Addr) | Tag Name | 類型 | 單位與說明 |
@@ -100,8 +104,20 @@
 3. **32位元支援**:
    所有 S32 (帶符號 32 位元) 標籤均正確處理負數補碼，可直觀顯示「買電/賣電」與「充電/放電」的狀態切換。
 
-## 4. 快速開始
+## 4. 技術實作說明
 
-1. 安裝環境：`pip install pymodbus`
-2. 執行腳本：`python main.py`
-3. 使用 Modbus 工具連線至 `localhost:7002` 即可讀取與寫入以上所有標籤。
+* **Big-Endian 32-bit**: `U32/S32` 以「高位暫存器在前」的順序存放（register order big-endian）。
+* **外部寫入**: 部分位址屬可寫入設定；模擬器會印出外部寫入（若你在 `main.py` 內維持 `LoggingDataBlock` 行為）。
+
+## 5. 快速開始
+
+1. 安裝依賴：`pip install -r requirements.txt`
+2. 啟動模擬器：`python main.py`
+3. 使用 Modbus 工具連線至 `127.0.0.1:7002` 讀取與寫入以上所有標籤
+
+### Docker / Compose
+* Build/Run:
+  * `docker build -t pcs-server:1.0 .`
+  * `docker run --rm -p 7002:7002 pcs-server:1.0`
+* Compose:
+  * `docker compose up -d --build`

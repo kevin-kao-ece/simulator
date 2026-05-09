@@ -1,0 +1,3 @@
+# main.py supports pymodbus 2.5.x and 3.8.x–3.12.x (imports / ModbusDeviceContext.store).
+# 3.13+ rewrote datastore (SimData sequential blocks disallow base address 0, no ctx.store).
+pymodbus>=3.8.0,<3.13

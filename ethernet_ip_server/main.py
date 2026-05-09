@@ -5,11 +5,11 @@ import time
 from dataclasses import dataclass
 
 import yaml
-from cpppo.server.enip import client
-from cpppo.server.enip.main import main as enip_main_function
+
+from enip_min_server import EnipTagServer
 
 _DEFAULT_CONFIG = {
-    "server": {"host": "0.0.0.0", "port": 6003},
+    "server": {"host": "0.0.0.0", "port": 16005},
     "simulator": {
         "tick_s": 0.1,
         "init": {"motor_control": 0, "target_speed": 1200},
@@ -103,6 +103,20 @@ TAGS = [
     f"{TAG['current_temperature']}=REAL:25.0",
 ]
 
+_TAG_STORE_LOCK = threading.Lock()
+_TAG_STORE: dict[str, tuple[str, object]] = {}
+for t in TAGS:
+    # "Motor_Control=BOOL:0"
+    name, rest = t.split("=", 1)
+    typ, val = rest.split(":", 1)
+    if typ.upper() == "STRING":
+        v = str(val).strip().strip("'")
+    elif typ.upper() in ("REAL", "LREAL"):
+        v = float(val)
+    else:
+        v = int(val)
+    _TAG_STORE[str(name)] = (typ.upper(), v)
+
 
 def _bcd_pack_u16_u9999(value: float) -> int:
     v = int(max(0, min(9999, round(value))))
@@ -121,21 +135,6 @@ class MotorState:
     energy_kwh: float = 0.0
 
 
-def _read_tags(conn, names: list[str]) -> dict[str, object]:
-    ops = client.parse_operations(names)
-    out: dict[str, object] = {}
-    for _, descr, _, _, status, value in conn.pipeline(ops):
-        if status == 0:
-            out[str(descr)] = value
-    return out
-
-
-def _write_tags(conn, operations: list[str]) -> None:
-    ops = client.parse_operations(operations)
-    for _ in conn.pipeline(ops):
-        pass
-
-
 def motor_loop(server_host: str, server_port: int, stop_event: threading.Event) -> None:
     """
     透過 EtherNet/IP client 迴圈讀/寫 tags，讓數值隨 Motor_Control/Target_Speed 更新。
@@ -148,11 +147,10 @@ def motor_loop(server_host: str, server_port: int, stop_event: threading.Event) 
 
     while not stop_event.is_set():
         try:
-            with client.connector(host=server_host, port=server_port, timeout=1.0) as conn:
-                while not stop_event.is_set():
-                    r = _read_tags(conn, [TAG["motor_control"], TAG["target_speed"]])
-                    motor_control = bool(r.get(TAG["motor_control"], 0))
-                    target = int(r.get(TAG["target_speed"], 0))
+            while not stop_event.is_set():
+                with _TAG_STORE_LOCK:
+                    motor_control = bool(_TAG_STORE.get(TAG["motor_control"], ("BOOL", 0))[1])
+                    target = int(_TAG_STORE.get(TAG["target_speed"], ("INT", 0))[1])
 
                     # 物理：每 0.1s tick
                     if motor_control:
@@ -194,24 +192,20 @@ def motor_loop(server_host: str, server_port: int, stop_event: threading.Event) 
                     temp_wave = math.sin(time.time() / 5.0) * 0.3
                     temperature = float(temp_base + temp_wave)
 
-                    _write_tags(
-                        conn,
-                        [
-                            f"{TAG['motor_run']}=(BOOL){motor_run}",
-                            f"{TAG['motor_fault']}=(BOOL){fault}",
-                            f"{TAG['current_speed']}=(REAL){st.rpm}",
-                            f"{TAG['current_amps']}=(REAL){float(amps)}",
-                            f"{TAG['err_scaled']}=(INT){err_scaled}",
-                            f"{TAG['runtime_ticks']}=(DINT){st.ticks}",
-                            f"{TAG['encoder']}=(DINT){st.encoder}",
-                            f"{TAG['energy_kwh']}=(LREAL){float(st.energy_kwh)}",
-                            f"{TAG['busv_x10']}=(INT){bus_v_x10}",
-                            f"{TAG['rpm_bcd']}=(INT){rpm_bcd}",
-                            f"{TAG['current_temperature']}=(REAL){temperature}",
-                        ],
-                    )
+                with _TAG_STORE_LOCK:
+                    _TAG_STORE[TAG["motor_run"]] = ("BOOL", int(motor_run))
+                    _TAG_STORE[TAG["motor_fault"]] = ("BOOL", int(fault))
+                    _TAG_STORE[TAG["current_speed"]] = ("REAL", float(st.rpm))
+                    _TAG_STORE[TAG["current_amps"]] = ("REAL", float(amps))
+                    _TAG_STORE[TAG["err_scaled"]] = ("INT", int(err_scaled))
+                    _TAG_STORE[TAG["runtime_ticks"]] = ("DINT", int(st.ticks))
+                    _TAG_STORE[TAG["encoder"]] = ("DINT", int(st.encoder))
+                    _TAG_STORE[TAG["energy_kwh"]] = ("LREAL", float(st.energy_kwh))
+                    _TAG_STORE[TAG["busv_x10"]] = ("INT", int(bus_v_x10))
+                    _TAG_STORE[TAG["rpm_bcd"]] = ("INT", int(rpm_bcd))
+                    _TAG_STORE[TAG["current_temperature"]] = ("REAL", float(temperature))
 
-                    time.sleep(float(SIM.get("tick_s", 0.1)))
+                time.sleep(float(SIM.get("tick_s", 0.1)))
         except Exception:
             # 連線失敗/重連：稍等再試
             time.sleep(0.5)
@@ -220,13 +214,18 @@ def motor_loop(server_host: str, server_port: int, stop_event: threading.Event) 
 def start_server() -> None:
     print("--- EtherNet/IP (CIP Tag) Motor Simulator Starting ---")
     print(f"Listening on {HOST}:{PORT}")
-    enip_main_function(host=HOST, port=PORT, tags=TAGS)
+    # cpppo 預設會同時啟用 TCP 與 UDP 並嘗試綁定同一個 port；在 Windows 上 UDP port
+    # 常被其他服務占用而導致整個 server thread 直接失敗。這個 simulator 的 client loop
+    # 只需要 TCP（Read/Write Tag），因此預設關閉 UDP 以提高啟動成功率。
+    server = EnipTagServer(HOST, PORT, _TAG_STORE, lock=_TAG_STORE_LOCK)
+    server.debug = False
+    server.start()
+    return server
 
 
 if __name__ == "__main__":
     stop_event = threading.Event()
-    server_thread = threading.Thread(target=start_server, daemon=True)
-    server_thread.start()
+    server = start_server()
 
     logic_thread = threading.Thread(target=motor_loop, args=("127.0.0.1", PORT, stop_event), daemon=True)
     logic_thread.start()
@@ -236,4 +235,8 @@ if __name__ == "__main__":
             time.sleep(1.0)
     except KeyboardInterrupt:
         stop_event.set()
+        try:
+            server.stop()
+        except Exception:
+            pass
         print("\nServer Offline.")

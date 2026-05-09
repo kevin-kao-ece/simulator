@@ -4,6 +4,6 @@ services:
     container_name: melsec-server
     restart: unless-stopped
     ports:
-      - 6001:6001
+      - 16002:16002
     volumes:
       - $PWD:/melsec_server
