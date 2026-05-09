@@ -8,15 +8,5 @@ COPY . /${APP}
 WORKDIR /${APP}
 RUN pip3 install -r requirements.txt
 
-# Run the cpppo module directly. 
-# -u: unbuffered output so you see logs in 'docker logs'
-# -a: bind to 0.0.0.0 so the container is reachable from the outside
-CMD ["python3", "-u", "-m", "cpppo.server.enip", \
-     "-a", "0.0.0.0:6003", \
-     "Motor_Control=BOOL", \
-     "Motor_Run=BOOL", \
-     "Mode=SINT", \
-     "Target_Speed=INT", \
-     "Current_Speed=INT", \
-     "Current_Temperature=REAL", \
-     "Name=STRING"]
+# 使用本專案的 main.py（含 motor background logic）
+CMD ["python3", "-u", "./main.py"]

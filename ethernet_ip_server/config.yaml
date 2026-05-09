@@ -1,0 +1,38 @@
+server:
+  host: 0.0.0.0
+  port: 6003
+
+# 內建馬達模擬器（對齊其他專案的 motor semantics）
+simulator:
+  tick_s: 0.1
+  init:
+    # 等同 Y0；啟動後會加速到 target_speed
+    motor_control: 0
+    # 等同 D14
+    target_speed: 1200
+  physics:
+    accel_per_tick: 50.5
+    decel_per_tick: 30.2
+    fault_rpm_threshold: 1800
+
+# CIP Tags（Logix-like）
+# 型別：BOOL/SINT/INT/DINT/LINT/REAL/LREAL/STRING
+tags:
+  name: Name
+  mode: Mode
+
+  motor_control: Motor_Control
+  motor_run: Motor_Run
+  motor_fault: Motor_Fault
+
+  target_speed: Target_Speed
+  current_speed: Current_Speed
+  current_amps: Current_Amps
+  err_scaled: ErrScaled
+  runtime_ticks: RuntimeTicks
+  encoder: Encoder
+  energy_kwh: Energy_kWh
+  busv_x10: BusV_x10
+  rpm_bcd: RPM_BCD
+  current_temperature: Current_Temperature
+
